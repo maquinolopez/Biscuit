@@ -102,9 +102,9 @@ See [examples](examples) for sample data and usage.
 
 ***
 
-## Examples
+<!-- ## Examples
 
-See the [examples/](examples) folder for sample data and scripts.
+See the [examples/](examples) folder for sample data and scripts. -->
 
 ## Authors
 
@@ -112,7 +112,7 @@ BISCUIT was developed by [Marco A. Aquino-Lopez](aquino@cimat.mx).
 
 ## Issues
 
-Please submit bugs and feature requests via GitHub issues or by emails the [author](aquino@cimat.mx).
+Please submit bugs and feature requests via GitHub issues or by emailing the [author](aquino@cimat.mx).
 
 ## License 
 
