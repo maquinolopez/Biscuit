@@ -9,7 +9,7 @@
 
 density_plot <- function(depths, tar_mt,xlabel,ylabel = "proxy units",add = FALSE,axis=TRUE,flip=FALSE){
   depths_bw <- depths[2] - depths[1] 
-  t_max <- max(tar_mt)
+  t_max <- quantile(tar_mt, probs = c(0.999))
   t_min <- min(tar_mt)
 
   if (!add){
@@ -58,13 +58,11 @@ density_plot <- function(depths, tar_mt,xlabel,ylabel = "proxy units",add = FALS
 
 Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
                    n_sections = TRUE,n_tie_points, sampling_date,
-                   thin=20,burn=1e+3,iters=2.5e+3,
+                   thin=25,burn=1e+3,iters=2.5e+3,
                    shape_acc = 1.5,  mean_acc = 10,
                    strength_mem = 20, mean_mem = .5,
                    run_target = FALSE
                    ){
-  print(folder)
-  print(paste0(folder,'/twalk.R'))
   source(paste0(folder,'/twalk.R'))
   
   # Prepare data
@@ -86,11 +84,10 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
     
     depths <- tiepoints$tar_tie
     df <- matrix(NA, nrow = length(depths), ncol = length(Bacon.Age.d(depths[1])))
-    cat('\n Getting the ages')
+    cat('\n Getting the age posterior distributions')
     pb <- txtProgressBar(min = 0, max = length(depths), style = 3, char = "=") 
     for (i in 1:length(depths)) {
-      vector_data <- as.numeric(Bacon.Age.d(depths[i]))
-      df[i, ] <- vector_data
+      df[i, ] <- as.numeric(Bacon.Age.d(depths[i]))
       setTxtProgressBar(pb, i)
     }
     return(df)
@@ -110,6 +107,7 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
     # Plot both time series with adjusted y-axis limits
     plot(input, type = "l", main = "Time Series Comparison", xlab = "Time", ylab = "Value", col = "blue", ylim = c(y_min, y_max), yaxt = "n")
     lines(target, col = "red")
+    legend("topleft", legend = c("Input", "Target"),  col = c(rgb(0,0,1,.9), rgb(1,0,0,.9)),  lty = 1, lwd = 2, bty = "n")
     
     tie_input <- c()
     tie_target <- c()
@@ -135,9 +133,42 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
   
   # Get tie points
   tie_points <-  select_tiepoints(input_p, target_p, n_tie_points)
+  # Directory where you want to search for the file
+  directory_path <- paste0(folder,Input,'-',Target,'/',Target)
+  matching_files <- list.files(path = directory_path, pattern = paste0(Target,'.csv$'), full.names = TRUE)
+  tar_input_file <- read.table(matching_files[1], header = TRUE, sep = ",")  # load input file
+
+  if (length(colnames(tar_input_file))<=5){
+    if ( max(tar_input_file$depth) < max(input_p$depth)){
+      cat('\nThe target chronology is smaller than the proxy record.')
+      cat('\nWe can only align in the windows of the target chronology.')
+      break
+      }
+  }else{
+    if ( max(tar_input_file$depth.cm.) < max(input_p$depth) ){
+      cat('\nThe target chronology is smaller than the proxy record.')
+      cat('\nWe can only align in the windows of the target chronology.')
+      break
+      }
+  }
+  
+
   
   tar <- get_ages(tie_points ,Target)
 
+
+  # Find files matching the pattern "_ages.txt" in the directory
+  matching_files <- list.files(path = directory_path, pattern = "_ages.txt$", full.names = TRUE)
+
+  if (length(matching_files) > 0) {
+    file_path <- matching_files[1]
+    target_gdm <- read.table(file_path, header = TRUE, sep = "\t")  
+  } else {
+    cat("Age depth model for the target not found.\n")
+    break
+  }
+  
+  target_p$ages_tar <- approx(x = target_gdm$depth,y = target_gdm$mean,xout = target_p$depth)$y
 
   # get the kernel distributions
   ######################
@@ -246,11 +277,12 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
   
 
   n_kde <- length(tar[1,])
+  sd_convertor <- 1/(1.06*n_kde^(-1/5))
   # Define a function to get the log density for a given depth and value y
   l_target_kernel <- function(d, new_x,kde_list) {
     # d is the location in the age vector
     kde <- kde_list[[d]]
-    return(sum(dnorm(new_x , tar[d,],kde$bw,log=T)) /(kde$bw * n_kde) )
+    return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
   }
   
   # objective function
@@ -436,26 +468,39 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
         lines(tie_points$inp_tie[i] + length_x * d_kde$y,d_kde$x,col=rgb(0,0,1,.8))
         lines(tie_points$inp_tie[i] - length_x * d_kde$y,d_kde$x,col=rgb(0,0,1,.8))
       }
+      # add the proxy plot
+      target_p$norm_val <- (target_p$value - min(target_p$value))/sd(target_p$value)
+      input_p$ages_inp <- approx(xs,quants[2,],input_p$depth)$y
+      input_p$norm_val <- (input_p$value - min(input_p$value))/sd(input_p$value)
+      d_length <- .01 * (tail(input_p$depth,1) - input_p$depth[1])
+      # plot the proxies
+      lines(d_length * input_p$norm_val,input_p$ages_inp ,col=rgb(0,0,1,.4))
+      lines(d_length * target_p$norm_val,target_p$ages_tar,col=rgb(0,1,.01,.4))
+      legend("topleft", legend = c("Input", "Target"), 
+             col = c(rgb(0,0,1,.4), rgb(0,1,.01,.4)), 
+             lty = 1, lwd = 2, bty = "n")
+      
   }
   
-  message("\n We're all out of BISCUITs - your chronology integration is now complete! ")
+  message("\n We're all out of BISCUITs - your integrated chronology is now complete! ")
   return(output)
 }
 
 
 
 
-n_tie_points=4
-
-Target = 'GB0220'
-Input = 'GB0619'
-
-
-out = Biscut(Input=Input,Target=Target,'~/Documents/Biscuit/',
-                   n_sections = TRUE, n_tie_points, sampling_date = 2020.1,
-                   shape_acc = 1.5,  mean_acc = 20,
-                   strength_mem = 20, mean_mem = .5,
-                   run_target = FALSE)
+# n_tie_points=4
+# 
+# Target = 'GB0220'
+# Input = 'GB0619'
+# 
+# 
+# out = Biscut(Input=Input,Target=Target,'~/Documents/Biscuit/',
+#                    n_sections = TRUE, n_tie_points, sampling_date = 2020.1,
+#                    thin=5,
+#                    shape_acc = 1.5,  mean_acc = 20,
+#                    strength_mem = 20, mean_mem = .5,
+#                    run_target = TRUE)
 
 
 
