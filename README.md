@@ -41,7 +41,7 @@ To install, clone or download the repository so the files are in your working di
 2. **Run BISCUIT**
 
    ```R
-   output <- Biscut(Input="input", Target="target", 
+   output <- Biscuit(Input="input", Target="target", 
                     folder='data/',  
                     n_tie_points=5,
                     run_target=FALSE)
@@ -57,7 +57,7 @@ See [examples](examples) for sample data and usage.
 
 ## Function Arguments
 
-`Biscut()` accepts the following arguments:
+`Biscuit()` accepts the following arguments:
 
 - `Input` (str): Name of input record CSV file
 - `Target` (str): Name of target record CSV file 
@@ -90,7 +90,7 @@ See [examples](examples) for sample data and usage.
 
 ## Output 
 
-`Biscut()` returns a list containing:
+`Biscuit()` returns a list containing:
 
 - `age_models`: Matrix of age models at depth sections
 - `elbows`: Depth sections

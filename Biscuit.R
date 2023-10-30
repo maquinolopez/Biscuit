@@ -56,7 +56,7 @@ density_plot <- function(depths, tar_mt,xlabel,ylabel = "proxy units",add = FALS
 
 
 
-Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
+Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
                    n_sections = TRUE,n_tie_points, sampling_date,
                    thin=25,burn=1e+3,iters=2.5e+3,
                    shape_acc = 1.5,  mean_acc = 10,
@@ -282,7 +282,8 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
   l_target_kernel <- function(d, new_x,kde_list) {
     # d is the location in the age vector
     kde <- kde_list[[d]]
-    return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
+    # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
+    return(log( sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=F))) - log(n_kde*kde$bw) )
   }
   
   # objective function
@@ -488,19 +489,19 @@ Biscut <- function(Input, Target, folder ='~/Documents/Biscuit/',
 
 
 
-
+# 
 # n_tie_points=4
 # 
 # Target = 'GB0220'
 # Input = 'GB0619'
 # 
 # 
-# out = Biscut(Input=Input,Target=Target,'~/Documents/Biscuit/',
+# out = Biscuit(Input=Input,Target=Target,'~/Documents/Biscuit/',
 #                    n_sections = TRUE, n_tie_points, sampling_date = 2020.1,
-#                    thin=5,
+#                    thin=15,
 #                    shape_acc = 1.5,  mean_acc = 20,
 #                    strength_mem = 20, mean_mem = .5,
-#                    run_target = TRUE)
+#                    run_target = FALSE)
 
 
 
