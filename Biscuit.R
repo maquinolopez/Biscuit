@@ -61,6 +61,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
                    thin=25,burn=1e+3,iters=2.5e+3,
                    shape_acc = 1.5,  mean_acc = 10,
                    strength_mem = 20, mean_mem = .5,
+                   d_by=1,
                    run_target = FALSE
                    ){
   source(paste0(folder,'/twalk.R'))
@@ -439,6 +440,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   output$elbows = x_sections
   output$age_means = colMeans(t_mat2)
   output$tie_points
+  
   # Quantile functions  
   q5 <- function(x) quantile(x, probs = 0.05)
   q50 <- function(x) quantile(x, probs = 0.50) 
@@ -483,6 +485,29 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
       
   }
   
+  # Define the sequence of x values for interpolation
+  x_values <- seq(min(xs), max(xs), by = d_by)
+  
+  # Interpolate the minimum, medium, and maximum ages
+  age_min_interp <- approx(x = output$elbows, y = output$age_min, xout = x_values)
+  age_medium_interp <- approx(x = output$elbows, y = output$age_medium, xout = x_values)
+  age_max_interp <- approx(x = output$elbows, y = output$age_max, xout = x_values)
+  age_mean_interp <- approx(x = output$elbows, y = output$age_means, xout = x_values)
+  
+  # Create a dataframe with the interpolated values and x values
+  interpolated_df <- data.frame(
+    Depth = x_values,
+    Min = age_min_interp$y,
+    Medium = age_medium_interp$y,
+    Max = age_max_interp$y
+  )
+  
+  output$ages <- interpolated_df
+  
+  
+  
+  
+  
   message("\n We're all out of BISCUITs - your integrated chronology is now complete! ")
   return(output)
 }
@@ -490,7 +515,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
 
 
 # 
-# n_tie_points=4
+# n_tie_points=2
 # 
 # Target = 'GB0220'
 # Input = 'GB0619'
@@ -502,6 +527,6 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
 #                    shape_acc = 1.5,  mean_acc = 20,
 #                    strength_mem = 20, mean_mem = .5,
 #                    run_target = FALSE)
-
+# # 
 
 
