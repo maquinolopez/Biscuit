@@ -1,6 +1,6 @@
 # BISCUIT
 
-<img src="Figures/Biscuit-redlines.png" width="150" align="right">
+<img src="Figures/Biscuit-logo.jpeg" width="150" align="right">
 
 BISCUIT (Bayesian Integration of Sequences Using Chronology Intersection Tie-points) is an R package for integrating the chronology of an input paleoclimate record with a target record that has known chronological control points.
 
