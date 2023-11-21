@@ -11,7 +11,6 @@ density_plot <- function(depths, tar_mt,xlabel,ylabel = "proxy units",add = FALS
   depths_bw <- depths[2] - depths[1] 
   t_max <- quantile(tar_mt, probs = c(0.999))
   t_min <- min(tar_mt)
-
   if (!add){
     if(axis){
       if (flip){
@@ -53,6 +52,23 @@ density_plot <- function(depths, tar_mt,xlabel,ylabel = "proxy units",add = FALS
   }
 }
 
+# target function as preparation
+target_density <-function(tar_ages,tar){
+  tar = t(tar)
+  # Initialize an empty list to store the density objects for each depth
+  kde_list <- c()
+  
+  # Loop through each column (depth) to calculate the kernel density
+  for (col in 1:length(tar_ages)) {
+    values_at_depth <- tar[,col]
+    # Compute kernel density and add to the list
+    kde <- density(values_at_depth, kernel = 'gaussian' )
+    kde_list <- c(kde_list , as.numeric(kde['bw'] ) )
+    # print(kde$bw)
+  }
+  
+  return(kde_list)
+}
 
 
 
@@ -171,23 +187,6 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   
   target_p$ages_tar <- approx(x = target_gdm$depth,y = target_gdm$mean,xout = target_p$depth)$y
 
-  # get the kernel distributions
-  ######################
-  # target function as preparation
-  target_density <-function(tar_ages,tar,bw = "nrd0"){ # other default for bw = 0.05
-    # Initialize an empty list to store the density objects for each depth
-    kde_list <- list()
-    # Loop through each column (depth) to calculate the kernel density
-    for (col in 1:length(tar_ages)) {
-      values_at_depth <- tar[col,]
-      # Compute kernel density and add to the list
-      kde <- density(values_at_depth, kernel = 'gaussian',bw =bw ,from = 1950 - as.integer(format(Sys.Date(), "%Y")) )
-      kde_list[[col]] <- kde
-    }
-    
-    return(kde_list)
-  }
-  
   kde_list <- target_density(tie_points$tar_tie,tar)
   # create initial sections
   x_sections <- seq(input_p$depth[1],tail(input_p$depth,1),length.out=n_sections)
@@ -266,33 +265,53 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   
   
   # likelihood  
-  loglikelihood_uq <- function(params,newx){
+  loglikelihood_uq <- function(params){
     t_times <- ttime(tie_points$inp_tie,params,b_length)
     ll <- 0 
     for (k in 1:length(t_times)){
-      lk <- l_target_kernel(d = k,kde_list = kde_list, new_x = t_times[k])
+      kde <- as.double(kde_list[[k]]['bw'])
+      # lk <- l_target_kernel(d = k, new_x = t_times[k],kde = kde)
+      lk <- l_target_kernelC(d = k, new_x = t_times[k],kde = kde)
       ll <- ll + lk # d, y,kde_list
     }
     return(ll)
   }
   
+  loglikelihood_uqC <- function(params){
+    t_times <- ttime(tie_points$inp_tie,params,b_length)
+    ll <-loglikelihood_uqCpp(params, t_times, kde_list,tar, sd_convertor )
+    return(ll)
+  }
+
+  
+  
+  
 
   n_kde <- length(tar[1,])
   sd_convertor <- 1/(1.06*n_kde^(-1/5))
   # Define a function to get the log density for a given depth and value y
-  l_target_kernel <- function(d, new_x,kde_list) {
-    # d is the location in the age vector
-    kde <- kde_list[[d]]
+  l_target_kernel <- function(d, new_x,kde) {
     # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
-    return(log( sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=F))) - log(n_kde*kde$bw) )
+    return(log( sum(dnorm(x = new_x , mean = tar[d,], sd = sd_convertor * kde ))) - log(sd_convertor * kde) )
   }
+  
+  Rcpp::sourceCpp("~/GitHub/Biscut/targetDensity.cpp")
+  l_target_kernelC <- function(d, new_x,kde) {
+    
+    result <- lTargetKernelCpp(d, new_x, kde, tar[d,], sd_convertor)
+    
+    # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
+    return( result )
+  }
+  
+  
   
   # objective function
   obj <- function(param){ 
     # print(loglikelihood_uq(param,tie_points$inp_tie))
     # print(logprior(param))
     # print('----')
-    - (logprior(param) + loglikelihood_uq(param,tie_points$inp_tie)  ) 
+    - (logprior(param) + loglikelihood_uqC(param)  ) 
     }
 
   sampler <-  function(rerun=FALSE){
@@ -328,7 +347,8 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   }
   
   
-  # run twalk
+  #### run twalk ####
+  start.time <- Sys.time()
   message("\nSearching for initial values...")
   x1 <- initial_search()
   x2 <- initial_search()
@@ -339,6 +359,10 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   output <- Runtwalk(iters,Obj = obj,dim = length(x1),x0 = x1,xp0 = x2,Supp =supp,
                       thinning = length(x1)*thin,burnin= length(x1) * burn )
                      #thinning = thin,burnin= burn )
+  
+  end_time <- Sys.time()
+  total_time = end_time - start.time 
+  print(total_time)
   
   # twalk state
   lastx = tail(output$output, 1)
@@ -351,18 +375,24 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   energy2 <- output$Ups[-1]
   # write.csv(c,paste0(folder,Input,'-',Target,'_',n_sections,".out"), row.names=FALSE)#, col.names=FALSE)
   
-  iat <- IAT(output,to=output$Tr)
+  iat <- as.integer(IAT(output,to=output$Tr))
   
   # 
-  cat("\n================== IAT DIAGNOSTIC ==================\n")
-  cat("IAT Value:", iat, "\n")
-  if (iat < 5) {
-    cat("Interpretation: The chain exhibits low correlation among successive samples.\n")
-  } else {
+
+  if (!(iat < 2) ){
+    cat("\n================== IAT DIAGNOSTIC ==================\n")
+    cat("IAT Value:", iat, "\n")
     cat("Interpretation: The chain exhibits high correlation among successive samples.\n")
     cat("Recommendation: Consider increasing the thinning value and rerunning the chain.\n")
+    cat("\n====================================================\n")
+
+  } else {
+    # cat("\n================== IAT DIAGNOSTIC ==================\n")
+    # cat("IAT Value:", iat, "\n")
+    # cat("Interpretation: The chain exhibits low correlation among successive samples.\n")
+    # cat("\n====================================================\n")
   }
-  cat("\n====================================================\n")
+
   
   ######## Plot results######
   ##
@@ -409,7 +439,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     # Determine the combined y-range for setting ylim
     y_range <- c(0,max(c(max(y_beta),max(d_w$y))) )
     
-    curve(dbeta(x, m_alpha, m_beta), from=0, to=1, , ylim=y_range, 
+    curve(dbeta(x, m_alpha, m_beta), from=0, to=1, ylim=y_range, 
           xlab="memory", ylab="Density", main="",yaxt="n")
     lines(d_w,col='blue')
   }
@@ -515,18 +545,19 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
 
 
 # 
-# n_tie_points=2
-# 
-# Target = 'GB0220'
-# Input = 'GB0619'
-# 
-# 
-# out = Biscuit(Input=Input,Target=Target,'~/Documents/Biscuit/',
-#                    n_sections = TRUE, n_tie_points, sampling_date = 2020.1,
-#                    thin=15,
-#                    shape_acc = 1.5,  mean_acc = 20,
-#                    strength_mem = 20, mean_mem = .5,
-#                    run_target = FALSE)
-# # 
+n_tie_points=2
+
+Target = 'GB0220'
+Input = 'GB0619'
+
+
+
+out = Biscuit(Input=Input,Target=Target,'~/Documents/Biscuit/',
+                   n_sections = TRUE, n_tie_points, sampling_date = 2020.1,
+                   thin=50,burn=3e+3,iters=4e+3,
+                   shape_acc = 1.5,  mean_acc = 20,
+                   strength_mem = 20, mean_mem = .5,
+                   run_target = FALSE)
+
 
 
