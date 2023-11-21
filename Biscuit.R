@@ -276,41 +276,31 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     }
     return(ll)
   }
-  
-  loglikelihood_uqC <- function(params){
-    t_times <- ttime(tie_points$inp_tie,params,b_length)
-    ll <-loglikelihood_uqCpp(params, t_times, kde_list,tar, sd_convertor )
-    return(ll)
-  }
-
-  
-  
-  
 
   n_kde <- length(tar[1,])
   sd_convertor <- 1/(1.06*n_kde^(-1/5))
   # Define a function to get the log density for a given depth and value y
   l_target_kernel <- function(d, new_x,kde) {
     # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
-    return(log( sum(dnorm(x = new_x , mean = tar[d,], sd = sd_convertor * kde ))) - log(sd_convertor * kde) )
+    return(log( sum(dnorm(x = new_x , mean = tar[d,], sd = sd_convertor * kde )))  )
   }
-  
+  # This is the C implementation of the likelihood
   Rcpp::sourceCpp("~/GitHub/Biscut/targetDensity.cpp")
   l_target_kernelC <- function(d, new_x,kde) {
-    
     result <- lTargetKernelCpp(d, new_x, kde, tar[d,], sd_convertor)
-    
-    # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
     return( result )
+  }
+  
+  loglikelihood_uqC <- function(params){
+    t_times <- ttime(tie_points$inp_tie,params,b_length)
+    ll <-loglikelihood_uqCpp(params, t_times, kde_list,tar, sd_convertor )
+    return(ll)
   }
   
   
   
   # objective function
   obj <- function(param){ 
-    # print(loglikelihood_uq(param,tie_points$inp_tie))
-    # print(logprior(param))
-    # print('----')
     - (logprior(param) + loglikelihood_uqC(param)  ) 
     }
 
@@ -386,13 +376,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     cat("Recommendation: Consider increasing the thinning value and rerunning the chain.\n")
     cat("\n====================================================\n")
 
-  } else {
-    # cat("\n================== IAT DIAGNOSTIC ==================\n")
-    # cat("IAT Value:", iat, "\n")
-    # cat("Interpretation: The chain exhibits low correlation among successive samples.\n")
-    # cat("\n====================================================\n")
   }
-
   
   ######## Plot results######
   ##
