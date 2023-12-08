@@ -66,7 +66,7 @@ target_density <-function(tar_ages,tar){
     kde_list <- c(kde_list , as.numeric(kde['bw'] ) )
     # print(kde$bw)
   }
-  
+
   return(kde_list)
 }
 
@@ -76,8 +76,10 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
                    n_sections = TRUE,n_tie_points, sampling_date,
                    thin=25,burn=1e+3,iters=2.5e+3,
                    shape_acc = 1.5,  mean_acc = 10,
-                   strength_mem = 20, mean_mem = .5,
-                   d_by=1,
+                   strength_mem = 10, mean_mem = .5,
+                   d_by=1, 
+                   # suggest_tie = TRUE, 
+                   # tolerance_preproc = 10,
                    run_target = FALSE
                    ){
   source(paste0(folder,'/twalk.R'))
@@ -89,7 +91,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   target_p <- read.csv(paste(folder,Input,'-',Target,'/',Target,"_proxy.csv",sep='') , header = TRUE, col.names = colnames)
   
   if (n_sections){
-    n_sections = as.integer(n_tie_points * 3 )
+    n_sections = as.integer(n_tie_points * 4 )
   }
 
   # Load run and return the ages at the depths of the tie points
@@ -122,8 +124,20 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     y_max <- max(max(input[,2]), max(target[,2] + y_offset))
     target[,2] = y_offset + target[,2]
     # Plot both time series with adjusted y-axis limits
-    plot(input, type = "l", main = "Time Series Comparison", xlab = "Time", ylab = "Value", col = "blue", ylim = c(y_min, y_max), yaxt = "n")
+    plot(input, type = "l", main = "Time Series Comparison", xlab = "Time", ylab = "Value", col = "blue", ylim = c(y_min-1, y_max+1), yaxt = "n")
     lines(target, col = "red")
+    
+    # rainbow_colors <- rep(rgb(.8,.5,1,.4) , length(intersections_input)) #rainbow(length(intersections_input),alpha=.4)
+    # 
+    # for (i in 1:length(intersections_input)) {
+    #   points(input[input[,1]==intersections_input[i],1],
+    #          input[input[,1]==intersections_input[i],2], col=rainbow_colors[i], pch=16)
+    # }
+    # for (i in 1:length(intersections_target)) {
+    #   points(target[target[,1]==intersections_target[i],1],
+    #          target[target[,1]==intersections_target[i],2], col=rainbow_colors[i], pch=16)
+    # }
+    # break
     legend("topleft", legend = c("Input", "Target"),  col = c(rgb(0,0,1,.9), rgb(1,0,0,.9)),  lty = 1, lwd = 2, bty = "n")
     
     tie_input <- c()
@@ -146,11 +160,74 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     return(tiepoints)
   }
   
-
   
+
+  # Pre-analysis to suggest tie points
+  # input_diff <- diff(min_max_normalize(input_p[,2]))
+  # input_depth_diff  <- input_p[which(input_diff < -1),1]
+  # 
+  # target_diff <-  diff(min_max_normalize(target_p[,2]))
+  # target_depth_diff  <- input_p[which(target_diff < -1),1]
+  # 
+  # distance_matrix <- matrix(nrow = length(input_depth_diff), ncol = length(target_depth_diff))
+  # for (i in 1:length(input_depth_diff)) {
+  #   for (j in 1:length(target_depth_diff)) {
+  #     distance_matrix[i, j] <- abs(input_depth_diff[i] - target_depth_diff[j])
+  #   }
+  # }
+  # 
+  # Find the minimum distance in the matrix
+  # min_distance <- min(distance_matrix)
+  
+  # # Initialize a list to store the intersections
+  # intersections_input <- c()
+  # intersections_target <- c()
+  # intersections_distan <- c()
+  # 
+  # 
+  # # Loop over the matrix to find values within the minimum distance plus tolerance
+  # for (i in 1:nrow(distance_matrix)) {
+  #   for (j in 1:ncol(distance_matrix)) {
+  #     if (distance_matrix[i, j] <= min_distance + tolerance_preproc) {
+  #       # Append the intersection information as a list to the intersections list
+  #       intersections_input <- c(intersections_input , input_depth_diff[i])
+  #       intersections_target <- c(intersections_target , target_depth_diff[j])
+  #       intersections_distan <- c(intersections_distan , distance_matrix[i, j])
+  #     }
+  #   }
+  # }
+  
+  # repeat to get the >1
+  # input_depth_diff  <- input_p[which(input_diff > 1),1]
+  # target_depth_diff  <- input_p[which(target_diff > 1),1]
+  # distance_matrix <- matrix(nrow = length(input_depth_diff), ncol = length(target_depth_diff))
+  # for (i in 1:length(input_depth_diff)) {
+  #   for (j in 1:length(target_depth_diff)) {
+  #     distance_matrix[i, j] <- abs(input_depth_diff[i] - target_depth_diff[j])
+  #   }
+  # }
+  # 
+  # Find the minimum distance in the matrix
+  # min_distance <- min(distance_matrix)
+  
+  # Loop over the matrix to find values within the minimum distance plus tolerance
+  # for (i in 1:nrow(distance_matrix)) {
+  #   for (j in 1:ncol(distance_matrix)) {
+  #     if (distance_matrix[i, j] <= min_distance + tolerance_preproc) {
+  #       # Append the intersection information as a list to the intersections list
+  #       intersections_input <- c(intersections_input , input_depth_diff[i])
+  #       intersections_target <- c(intersections_target , target_depth_diff[j])
+  #       intersections_distan <- c(intersections_distan , distance_matrix[i, j])
+  #     }
+  #   }
+  # }
+  # 
+  # print(intersections_target)
+  # print(intersections_input)
   # Get tie points
   tie_points <-  select_tiepoints(input_p, target_p, n_tie_points)
-  # Directory where you want to search for the file
+  
+  # Directory where you want tox search for the file
   directory_path <- paste0(folder,Input,'-',Target,'/',Target)
   matching_files <- list.files(path = directory_path, pattern = paste0(Target,'.csv$'), full.names = TRUE)
   tar_input_file <- read.table(matching_files[1], header = TRUE, sep = ",")  # load input file
@@ -159,7 +236,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     if ( max(tar_input_file$depth) < max(input_p$depth)){
       cat('\nThe target chronology is smaller than the proxy record.')
       cat('\nWe can only align in the windows of the target chronology.')
-      break
+
       }
   }else{
     if ( max(tar_input_file$depth.cm.) < max(input_p$depth) ){
@@ -170,9 +247,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   }
   
 
-  
   tar <- get_ages(tie_points ,Target)
-
 
   # Find files matching the pattern "_ages.txt" in the directory
   matching_files <- list.files(path = directory_path, pattern = "_ages.txt$", full.names = TRUE)
@@ -286,10 +361,10 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   }
   # This is the C implementation of the likelihood
   Rcpp::sourceCpp("~/GitHub/Biscut/targetDensity.cpp")
-  l_target_kernelC <- function(d, new_x,kde) {
-    result <- lTargetKernelCpp(d, new_x, kde, tar[d,], sd_convertor)
-    return( result )
-  }
+  # l_target_kernelC <- function(d, new_x,kde) {
+  #   result <- lTargetKernelCpp(d, new_x, kde, tar[d,], sd_convertor)
+  #   return( result )
+  # }
   
   loglikelihood_uqC <- function(params){
     t_times <- ttime(tie_points$inp_tie,params,b_length)
