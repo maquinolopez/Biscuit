@@ -7,6 +7,7 @@
 ### Using Chronology Intersection Tie-points
 ###########################################
 
+
 # Function which takes the depth vector and matrix of MCMC results
 density_plot <- function(depths, tar_mt, xlabel, ylabel = "proxy units",
                          add = FALSE, axis = TRUE, flip = FALSE,
@@ -190,8 +191,8 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
                    gmm_max_components = 20,
                    gmm_model_names = "V",
                    gmm_verbose = FALSE,
-                   bacon_suggest = FALSE,
-                   bacon_ask = FALSE
+                   bacon_ask = FALSE,
+                   bacon_suggest = FALSE
                    ){
   target_density_method <- match.arg(toupper(target_density_method), c("KDE", "GMM"))
   source(paste0(folder,'/twalk.R'))
@@ -419,51 +420,64 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
     return(sum(d))
   }
   
+  log_density_floor <- log(.Machine$double.xmin)
   
-  # likelihood  
-  loglikelihood_uq <- function(params){
-    t_times <- ttime(tie_points$inp_tie,params,b_length)
-    ll <- 0 
-    for (k in 1:length(t_times)){
-      kde <- as.double(kde_list[[k]]['bw'])
-      # lk <- l_target_kernel(d = k, new_x = t_times[k],kde = kde)
-      lk <- l_target_kernelC(d = k, new_x = t_times[k],kde = kde)
-      ll <- ll + lk # d, y,kde_list
+  log_sum_exp <- function(x, floor_value = log_density_floor) {
+    x <- x[is.finite(x)]
+    if (length(x) == 0) {
+      return(floor_value)
     }
-    return(ll)
+    max_x <- max(x)
+    value <- max_x + log(sum(exp(x - max_x)))
+    ifelse(is.finite(value), value, floor_value)
   }
-
+  
   if (target_density_method == "KDE") {
     n_kde <- length(tar[1,])
     sd_convertor <- 1/(1.06*n_kde^(-1/5))
-    # Define a function to get the log density for a given depth and value y
-    l_target_kernel <- function(d, new_x,kde) {
-      # return(sum(dnorm(new_x , tar[d,],sd_convertor * kde$bw,log=T)) / n_kde )
-      return(log( sum(dnorm(x = new_x , mean = tar[d,], sd = sd_convertor * kde )))  )
+
+    l_target_kernelR <- function(d, new_x, kde) {
+      sd_kernel <- sd_convertor * kde
+      target_values <- tar[d,]
+      keep <- is.finite(target_values) & is.finite(new_x) &
+        is.finite(sd_kernel) & sd_kernel > 0
+      if (!any(keep)) {
+        return(log_density_floor)
+      }
+      log_sum_exp(dnorm(x = new_x,
+                        mean = target_values[keep],
+                        sd = sd_kernel,
+                        log = TRUE))
     }
-    # This is the C implementation of the likelihood
-    Rcpp::sourceCpp("~/GitHub/Biscuit/targetDensity.cpp")
     
-    loglikelihood_uqC <- function(params){
+    loglikelihood_uqR <- function(params){
       t_times <- ttime(tie_points$inp_tie,params,b_length)
-      ll <-loglikelihood_uqCpp(params, 
-                                t_times, 
-                                kde_list,tar, 
-                                sd_convertor )
-      return(ll)
+      sum(vapply(seq_along(t_times), function(k) {
+        l_target_kernelR(d = k, new_x = t_times[k], kde = kde_list[[k]])
+      }, numeric(1)))
     }
   } else {
-    Rcpp::sourceCpp("~/GitHub/Biscuit/TargetDensityGMM.cpp")
+    l_target_gmmR <- function(new_x, means, variances, weights) {
+      sds <- sqrt(variances)
+      keep <- is.finite(means) & is.finite(sds) & sds > 0 &
+        is.finite(weights) & weights > 0
+      if (!any(keep)) {
+        return(log_density_floor)
+      }
+      log_sum_exp(log(weights[keep]) + dnorm(new_x,
+                                             mean = means[keep],
+                                             sd = sds[keep],
+                                             log = TRUE))
+    }
     
-    loglikelihood_uqC <- function(params){
+    loglikelihood_uqR <- function(params){
       t_times <- ttime(tie_points$inp_tie,params,b_length)
-      ll <- loglikelihood_uqGMMCpp(params,
-                                   t_times,
-                                   gmm_fit$means,
-                                   gmm_fit$variances,
-                                   gmm_weights,
-                                   sdsAreVariances = TRUE)
-      return(ll)
+      sum(vapply(seq_along(t_times), function(k) {
+        l_target_gmmR(new_x = t_times[k],
+                      means = gmm_fit$means[[k]],
+                      variances = gmm_fit$variances[[k]],
+                      weights = gmm_weights[[k]])
+      }, numeric(1)))
     }
   }
   
@@ -471,7 +485,7 @@ Biscuit <- function(Input, Target, folder ='~/Documents/Biscuit/',
   
   # objective function
   obj <- function(param){ 
-    - (logprior(param) + loglikelihood_uqC(param)  ) 
+    - (logprior(param) + loglikelihood_uqR(param)  ) 
     }
 
   sampler <-  function(rerun=FALSE){
@@ -715,9 +729,7 @@ out = Biscuit(Input=Input,Target=Target,'~/Documents/Biscuit/',
                    strength_mem = 20, mean_mem = .5,
                    run_target = FALSE,
                    target_age_model = "Bacon",
-                   target_density_method = "KDE",
-                   bacon_suggest = FALSE,
-                   bacon_ask = FALSE
+                   target_density_method = "KDE"
                   )
 
 end.time1 = Sys.time()

@@ -3,36 +3,47 @@
 #include <math.h>
 #include <vector>
 #include <cmath> // For pow, log, and sum
+#include <limits>
 
 using namespace Rcpp;
 
-// Helper function to calculate normal density
-  
-double NormalDensity(double x, double mean, double std_dev) {
-    // Function: NormalDensity
-    // Purpose: Computes the density of a normal distribution for a given value.
-    //
-    // Parameters:
-    // - double x: The value for which the density is to be calculated.
-    // - double mean: The mean of the normal distribution.
-    // - double std_dev: The standard deviation of the normal distribution.
-    //
-    // Returns:
-    // - A double value representing the density of the normal distribution at the point 'x'.
-    // _____________________________________________
-    // Normalize 'x' by subtracting the mean and dividing by the standard deviation
-    double nx = (x - mean)/std_dev;
-    // Calculate the logarithm of the standard deviation
-    double log_sig = log(std_dev );
-    // Square of the normalized value 'nx'
-    double sqr_x = nx *nx;
-    // Compute the logarithm of the density
-    double densi = -log_sig - .5 * sqr_x ;
-    // Calculate the density using the exponential of 'densi'
-    long double result = exp(densi);
-    // Return the calculated density
+double LogNormalDensity(double x, double mean, double std_dev) {
+    if (!std::isfinite(x) || !std::isfinite(mean) ||
+        !std::isfinite(std_dev) || std_dev <= 0.0) {
+      return R_NegInf;
+    }
+
+    double nx = (x - mean) / std_dev;
+    return -log(std_dev) - .5 * nx * nx;
+}
+
+double LogSumExp(const std::vector<double>& values) {
+    const double logDensityFloor = log(std::numeric_limits<double>::min());
+    double maxValue = R_NegInf;
+
+    for (double value : values) {
+      if (std::isfinite(value) && value > maxValue) {
+        maxValue = value;
+      }
+    }
+
+    if (!std::isfinite(maxValue)) {
+      return logDensityFloor;
+    }
+
+    long double total = 0.0;
+    for (double value : values) {
+      if (std::isfinite(value)) {
+        total += exp(value - maxValue);
+      }
+    }
+
+    double result = maxValue + log(static_cast<double>(total));
+    if (!std::isfinite(result)) {
+      return logDensityFloor;
+    }
+
     return result;
-    
 }
 
 NumericVector getColumn(NumericMatrix tar,int col) {
@@ -63,21 +74,18 @@ double lTargetKernelCpp(int d, double newX, double kdeValue, NumericVector tar, 
     // _____________________________________________
     // Calculate the scaled bandwidth
     double s_2 = sdConvertor * kdeValue;
-    // Initialize sum for densities
-    long double sumDnorm = 0;
+    std::vector<double> logDensities;
+    logDensities.reserve(tar.length());
     // Iterate over each element in the 'tar' vector
     for(int i = 0; i < tar.length(); i++) {
       // Current element from 'tar' vector
       double mu = tar[i];
-      // Accumulate the normal density for 'newX' given 'mu' and scaled bandwidth 's_2'
-      sumDnorm += NormalDensity(newX, mu, s_2);
+      logDensities.push_back(LogNormalDensity(newX, mu, s_2));
     }
     // Divide by the sample size
     //sumDnorm = sumDnorm / tar.length(); // remove because is a constant and it don't affect the overall likelihood
-    // Compute the log-transformed result
-    // Log of the sum of densities minus the log of the product of 'sdConvertor' and 'kdeValue'
-    double result = log(sumDnorm) ;//-  log( sdConvertor * kdeValue);
-    return result;
+    // Compute the log-transformed result on the log scale to avoid underflow.
+    return LogSumExp(logDensities);
 }
 
 
@@ -133,7 +141,5 @@ double tdistroC(const std::vector<double>& X, double Mu, double sigma, double a,
   
   return sum;
 }
-
-
 
 
